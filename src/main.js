@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 const canvas = document.querySelector('.webgl');
+const marquee = document.querySelector('#marquee');
 const modeName = document.querySelector('#modeName');
 const modeButton = document.querySelector('#modeButton');
 const driftButton = document.querySelector('#driftButton');
@@ -34,16 +35,18 @@ const pointer = {
 const state = {
   drift: true,
   zen: false,
+  reveal: false,
   audioEnabled: false,
   warp: 0,
   pulseStrength: 0,
+  hovered: false,
   userOrbiting: false,
-  lastInteractionTime: 0,
 };
 
 const modes = [
   {
     name: 'Velvet Pulse',
+    poem: 'Velvet pulse // light learns your handwriting',
     colorA: new THREE.Color('#7dd3fc'),
     colorB: new THREE.Color('#c084fc'),
     floorA: new THREE.Color('#0c1023'),
@@ -59,6 +62,7 @@ const modes = [
   },
   {
     name: 'Ghost Orchid',
+    poem: 'Ghost orchid // soft neon breathing under glass',
     colorA: new THREE.Color('#67e8f9'),
     colorB: new THREE.Color('#f9a8d4'),
     floorA: new THREE.Color('#091421'),
@@ -74,6 +78,7 @@ const modes = [
   },
   {
     name: 'Solar Ash',
+    poem: 'Solar ash // warm ruin, elegant embers',
     colorA: new THREE.Color('#f9c97d'),
     colorB: new THREE.Color('#fb7185'),
     floorA: new THREE.Color('#170f15'),
@@ -89,6 +94,7 @@ const modes = [
   },
   {
     name: 'Obsidian Bloom',
+    poem: 'Obsidian bloom // a garden grown in the dark',
     colorA: new THREE.Color('#9ae6b4'),
     colorB: new THREE.Color('#818cf8'),
     floorA: new THREE.Color('#071110'),
@@ -104,6 +110,7 @@ const modes = [
   },
   {
     name: 'Neon Relic',
+    poem: 'Neon relic // all signal, no dust',
     colorA: new THREE.Color('#38bdf8'),
     colorB: new THREE.Color('#f472b6'),
     floorA: new THREE.Color('#060d19'),
@@ -121,6 +128,41 @@ const modes = [
 
 let modeIndex = 0;
 let statusTimer = null;
+let marqueeTimer = null;
+
+function setStatus(text, ttl = 2400) {
+  statusText.textContent = text;
+  window.clearTimeout(statusTimer);
+  statusTimer = window.setTimeout(() => {
+    if (state.reveal) {
+      statusText.textContent = 'Reveal mode engaged';
+    } else if (state.audioEnabled) {
+      statusText.textContent = 'Sculpture humming softly';
+    } else {
+      statusText.textContent = 'Interactive sculpture online';
+    }
+  }, ttl);
+}
+
+function flashMarquee(text, ttl = 2800) {
+  marquee.textContent = text;
+  marquee.classList.add('is-visible');
+  window.clearTimeout(marqueeTimer);
+  marqueeTimer = window.setTimeout(() => {
+    marquee.classList.remove('is-visible');
+  }, ttl);
+}
+
+function updateUiState() {
+  driftButton.textContent = state.drift ? 'Drift on' : 'Drift off';
+  soundButton.textContent = state.audioEnabled ? 'Mute sound' : 'Enable sound';
+  zenButton.textContent = state.zen ? 'Exit zen' : 'Zen mode';
+  chipDrift.textContent = state.drift ? 'Drift on' : 'Drift off';
+  chipAudio.textContent = state.audioEnabled ? 'Sound on' : 'Sound off';
+  chipZen.textContent = state.zen ? 'UI hidden' : state.reveal ? 'UI visible / reveal' : 'UI visible';
+  document.body.classList.toggle('zen', state.zen);
+  document.body.classList.toggle('reveal', state.reveal);
+}
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#040610');
@@ -429,6 +471,21 @@ for (let i = 0; i < 22; i += 1) {
   orbitNodes.push(node);
 }
 
+const constellationPositions = new Float32Array((orbitNodes.length + 1) * 3);
+const constellationGeometry = new THREE.BufferGeometry();
+constellationGeometry.setAttribute('position', new THREE.BufferAttribute(constellationPositions, 3));
+const constellation = new THREE.Line(
+  constellationGeometry,
+  new THREE.LineBasicMaterial({
+    color: '#dbeafe',
+    transparent: true,
+    opacity: 0.02,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }),
+);
+mainGroup.add(constellation);
+
 const trailCount = 2800;
 const trailPositions = new Float32Array(trailCount * 3);
 const trailColors = new Float32Array(trailCount * 3);
@@ -510,6 +567,7 @@ const floorUniforms = {
   uPointer: { value: new THREE.Vector2(0, 0) },
   uColorA: { value: modes[0].floorA.clone() },
   uColorB: { value: modes[0].floorB.clone() },
+  uReveal: { value: 0 },
 };
 
 const floorMaterial = new THREE.ShaderMaterial({
@@ -519,6 +577,7 @@ const floorMaterial = new THREE.ShaderMaterial({
   vertexShader: `
     uniform float uTime;
     uniform vec2 uPointer;
+    uniform float uReveal;
 
     varying vec2 vUv;
     varying float vElevation;
@@ -530,7 +589,7 @@ const floorMaterial = new THREE.ShaderMaterial({
       float distanceToPointer = distance(pos.xz, uPointer);
       float ripple = sin(distanceToPointer * 4.5 - uTime * 2.5) * exp(-distanceToPointer * 0.8);
       float breeze = sin(pos.x * 0.85 + uTime * 0.3) * sin(pos.z * 0.78 - uTime * 0.24) * 0.08;
-      pos.y += ripple * 0.18 + breeze;
+      pos.y += ripple * (0.18 + uReveal * 0.05) + breeze;
 
       vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
       vElevation = pos.y;
@@ -544,6 +603,7 @@ const floorMaterial = new THREE.ShaderMaterial({
     uniform vec2 uPointer;
     uniform vec3 uColorA;
     uniform vec3 uColorB;
+    uniform float uReveal;
 
     varying vec2 vUv;
     varying float vElevation;
@@ -563,10 +623,10 @@ const floorMaterial = new THREE.ShaderMaterial({
       float horizon = 1.0 - smoothstep(0.08, 0.92, vUv.y);
 
       vec3 color = mix(uColorA, uColorB, clamp(vUv.y * 0.65 + pulse * 0.15, 0.0, 1.0));
-      color += grid * 0.6;
-      color += glow * 0.18;
+      color += grid * (0.6 + uReveal * 0.2);
+      color += glow * (0.18 + uReveal * 0.1);
       color += vElevation * 0.14;
-      color *= 0.42 + horizon * 0.16;
+      color *= 0.42 + horizon * 0.16 + uReveal * 0.04;
 
       gl_FragColor = vec4(color, 0.95);
     }
@@ -630,8 +690,7 @@ scene.add(burstPoints);
 function emitBurst() {
   for (let i = 0; i < burstCount; i += 1) {
     const direction = new THREE.Vector3().randomDirection();
-    const velocity = burstVelocities[i];
-    velocity.copy(direction).multiplyScalar(THREE.MathUtils.randFloat(0.03, 0.12));
+    burstVelocities[i].copy(direction).multiplyScalar(THREE.MathUtils.randFloat(0.03, 0.12));
     burstPositions[i * 3 + 0] = core.position.x;
     burstPositions[i * 3 + 1] = core.position.y;
     burstPositions[i * 3 + 2] = core.position.z;
@@ -644,7 +703,6 @@ const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1.55);
 const pointerProjection = new THREE.Vector3();
 const floorPointerTarget = new THREE.Vector2();
-let hovered = false;
 
 const audioEngine = {
   context: null,
@@ -656,35 +714,11 @@ const audioEngine = {
   lfoGain: null,
 };
 
-function setStatus(text) {
-  statusText.textContent = text;
-  clearTimeout(statusTimer);
-  statusTimer = window.setTimeout(() => {
-    statusText.textContent = state.zen
-      ? 'Zen mode active'
-      : state.audioEnabled
-        ? 'Sculpture humming softly'
-        : 'Interactive sculpture online';
-  }, 2400);
-}
-
-function updateUiState() {
-  modeButton.textContent = 'Shift mood';
-  driftButton.textContent = state.drift ? 'Drift on' : 'Drift off';
-  soundButton.textContent = state.audioEnabled ? 'Mute sound' : 'Enable sound';
-  zenButton.textContent = state.zen ? 'Exit zen' : 'Zen mode';
-  chipDrift.textContent = state.drift ? 'Drift on' : 'Drift off';
-  chipAudio.textContent = state.audioEnabled ? 'Sound on' : 'Sound off';
-  chipZen.textContent = state.zen ? 'UI hidden' : 'UI visible';
-  document.body.classList.toggle('zen', state.zen);
-}
-
 function setupAudio() {
   if (audioEngine.context) return audioEngine;
-
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) {
-    setStatus('Audio API not available in this browser');
+    setStatus('Audio API not available');
     return null;
   }
 
@@ -700,7 +734,6 @@ function setupAudio() {
   filter.type = 'lowpass';
   filter.frequency.value = 680;
   filter.Q.value = 4;
-
   oscA.type = 'triangle';
   oscB.type = 'sine';
   lfo.type = 'sine';
@@ -729,25 +762,24 @@ function setupAudio() {
 async function toggleAudio() {
   const engine = setupAudio();
   if (!engine) return;
-
   await engine.context.resume();
   state.audioEnabled = !state.audioEnabled;
+
   const now = engine.context.currentTime;
   engine.master.gain.cancelScheduledValues(now);
   engine.master.gain.setTargetAtTime(state.audioEnabled ? 0.045 : 0.0001, now, 0.3);
   setStatus(state.audioEnabled ? 'Generative hum enabled' : 'Sound muted');
+  flashMarquee(state.audioEnabled ? 'Sculpture awake // room tone engaged' : 'Silence restored // only light remains');
   updateUiState();
 }
 
 function updateAudioForMode(mode) {
-  const engine = audioEngine.context ? audioEngine : null;
-  if (!engine) return;
-
-  const now = engine.context.currentTime;
-  engine.oscA.frequency.setTargetAtTime(mode.audioBase, now, 0.4);
-  engine.oscB.frequency.setTargetAtTime(mode.audioBase * 1.5, now, 0.4);
-  engine.filter.frequency.setTargetAtTime(620 + mode.speed * 280, now, 0.4);
-  engine.lfoGain.gain.setTargetAtTime(120 + mode.bloom * 160, now, 0.6);
+  if (!audioEngine.context) return;
+  const now = audioEngine.context.currentTime;
+  audioEngine.oscA.frequency.setTargetAtTime(mode.audioBase, now, 0.45);
+  audioEngine.oscB.frequency.setTargetAtTime(mode.audioBase * 1.5, now, 0.45);
+  audioEngine.filter.frequency.setTargetAtTime(620 + mode.speed * 280, now, 0.45);
+  audioEngine.lfoGain.gain.setTargetAtTime(120 + mode.bloom * 160, now, 0.6);
 }
 
 function updateGroundPoint(clientX, clientY) {
@@ -762,88 +794,7 @@ function updateGroundPoint(clientX, clientY) {
   }
 }
 
-function triggerCorePulse() {
-  state.pulseStrength = 1.25;
-  state.warp = 1;
-  emitBurst();
-  finalPass.uniforms.pulseOrigin.value.copy(pointer.screen);
-  setMode(modeIndex + 1, true);
-  setStatus('Mood shifted');
-}
-
-function onPointerMove(event) {
-  updateGroundPoint(event.clientX, event.clientY);
-
-  raycaster.setFromCamera(pointer.raw, camera);
-  hovered = raycaster.intersectObject(core, false).length > 0;
-  document.body.style.cursor = hovered ? 'pointer' : 'default';
-}
-
-function onPointerDown(event) {
-  updateGroundPoint(event.clientX, event.clientY);
-  raycaster.setFromCamera(pointer.raw, camera);
-
-  if (raycaster.intersectObject(core, false).length > 0) {
-    triggerCorePulse();
-  }
-}
-
-function onTouchStart(event) {
-  if (event.touches.length > 0) {
-    const touch = event.touches[0];
-    updateGroundPoint(touch.clientX, touch.clientY);
-    triggerCorePulse();
-  }
-}
-
-function toggleDrift() {
-  state.drift = !state.drift;
-  setStatus(state.drift ? 'Camera drift engaged' : 'Camera drift paused');
-  updateUiState();
-}
-
-function toggleZen() {
-  state.zen = !state.zen;
-  setStatus(state.zen ? 'Zen mode engaged' : 'Zen mode disabled');
-  updateUiState();
-}
-
-function captureFrame() {
-  composer.render();
-  const link = document.createElement('a');
-  link.href = renderer.domElement.toDataURL('image/png');
-  link.download = `taste-nocturne-${modes[modeIndex].name.toLowerCase().replace(/\s+/g, '-')}.png`;
-  link.click();
-  setStatus('Frame captured');
-}
-
-window.addEventListener('pointermove', onPointerMove, { passive: true });
-window.addEventListener('pointerdown', onPointerDown, { passive: true });
-window.addEventListener('touchstart', onTouchStart, { passive: true });
-window.addEventListener('keydown', (event) => {
-  if (event.code === 'KeyM') {
-    triggerCorePulse();
-  }
-  if (event.code === 'KeyD') {
-    toggleDrift();
-  }
-  if (event.code === 'KeyH') {
-    toggleZen();
-  }
-  if (event.code === 'KeyS') {
-    toggleAudio();
-  }
-  if (event.code === 'KeyP') {
-    captureFrame();
-  }
-});
-modeButton.addEventListener('click', triggerCorePulse);
-driftButton.addEventListener('click', toggleDrift);
-soundButton.addEventListener('click', toggleAudio);
-captureButton.addEventListener('click', captureFrame);
-zenButton.addEventListener('click', toggleZen);
-
-function setMode(index, withPulse = false) {
+function setMode(index, fromInteraction = false) {
   modeIndex = ((index % modes.length) + modes.length) % modes.length;
   const mode = modes[modeIndex];
 
@@ -855,40 +806,150 @@ function setMode(index, withPulse = false) {
   atmosphereUniforms.uTop.value.copy(mode.atmosphereB);
   atmosphereUniforms.uBottom.value.copy(mode.atmosphereA);
 
-  bloomPass.strength = mode.bloom;
-  finalPass.uniforms.amount.value = mode.aberration;
+  bloomPass.strength = mode.bloom + (state.reveal ? 0.05 : 0);
+  finalPass.uniforms.amount.value = mode.aberration + (state.reveal ? 0.002 : 0);
   modeName.textContent = mode.name;
 
   ambience.color.copy(mode.colorA).lerp(mode.colorB, 0.4);
-  fillLight.color.copy(mode.colorB);
   keyLight.color.copy(mode.colorA);
+  fillLight.color.copy(mode.colorB);
   aura.material.color.copy(mode.colorB);
   pointerRing.material.color.copy(mode.colorA).lerp(mode.colorB, 0.3);
   pointerTrail.material.color.copy(mode.colorA).lerp(mode.colorB, 0.2);
+  constellation.material.color.copy(mode.colorA).lerp(mode.colorB, 0.25);
 
   document.documentElement.style.setProperty('--glow', `${mode.accent}30`);
   modeButton.style.boxShadow = `0 0 0 1px ${mode.accent}20, 0 0 24px ${mode.accent}25`;
-  updateAudioForMode(mode);
 
-  if (withPulse) {
-    state.pulseStrength = 1.25;
-    state.warp = 1;
+  updateAudioForMode(mode);
+  if (fromInteraction) flashMarquee(mode.poem);
+}
+
+function triggerPulse() {
+  state.pulseStrength = 1.25;
+  state.warp = 1;
+  emitBurst();
+  finalPass.uniforms.pulseOrigin.value.copy(pointer.screen);
+}
+
+function cycleMood() {
+  triggerPulse();
+  setMode(modeIndex + 1, true);
+  setStatus('Mood shifted');
+}
+
+function toggleDrift() {
+  state.drift = !state.drift;
+  setStatus(state.drift ? 'Camera drift engaged' : 'Camera drift paused');
+  flashMarquee(state.drift ? 'Drift on // the sculpture breathes by itself' : 'Drift off // your hand takes over');
+  updateUiState();
+}
+
+function toggleZen() {
+  state.zen = !state.zen;
+  setStatus(state.zen ? 'Zen mode engaged' : 'Zen mode disabled');
+  flashMarquee(state.zen ? 'Zen mode // nothing but light and motion' : 'Interface restored');
+  updateUiState();
+}
+
+function toggleReveal() {
+  state.reveal = !state.reveal;
+  triggerPulse();
+  setStatus(state.reveal ? 'Reveal mode engaged' : 'Reveal mode dismissed');
+  flashMarquee(state.reveal ? 'Reveal // the constellation wakes up' : 'Veil restored // relic returns to sleep', 3200);
+  updateUiState();
+  setMode(modeIndex, false);
+}
+
+function captureFrame() {
+  composer.render();
+  const link = document.createElement('a');
+  link.href = renderer.domElement.toDataURL('image/png');
+  link.download = `taste-nocturne-${modes[modeIndex].name.toLowerCase().replace(/\s+/g, '-')}.png`;
+  link.click();
+  setStatus('Frame captured');
+  flashMarquee('Frame captured // pocketing a shard of the night');
+}
+
+function onPointerMove(event) {
+  updateGroundPoint(event.clientX, event.clientY);
+  raycaster.setFromCamera(pointer.raw, camera);
+  state.hovered = raycaster.intersectObject(core, false).length > 0;
+  document.body.style.cursor = state.hovered ? 'pointer' : 'default';
+}
+
+function onPointerDown(event) {
+  updateGroundPoint(event.clientX, event.clientY);
+  raycaster.setFromCamera(pointer.raw, camera);
+  if (raycaster.intersectObject(core, false).length > 0) {
+    cycleMood();
   }
 }
 
-setMode(0);
+function onDoubleClick(event) {
+  updateGroundPoint(event.clientX, event.clientY);
+  raycaster.setFromCamera(pointer.raw, camera);
+  if (raycaster.intersectObject(core, false).length > 0) {
+    toggleReveal();
+  }
+}
+
+function onTouchStart(event) {
+  if (event.touches.length > 0) {
+    const touch = event.touches[0];
+    updateGroundPoint(touch.clientX, touch.clientY);
+    cycleMood();
+  }
+}
+
+window.addEventListener('pointermove', onPointerMove, { passive: true });
+window.addEventListener('pointerdown', onPointerDown, { passive: true });
+window.addEventListener('dblclick', onDoubleClick, { passive: true });
+window.addEventListener('touchstart', onTouchStart, { passive: true });
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'KeyM') cycleMood();
+  if (event.code === 'KeyD') toggleDrift();
+  if (event.code === 'KeyH') toggleZen();
+  if (event.code === 'KeyS') toggleAudio();
+  if (event.code === 'KeyP') captureFrame();
+  if (event.code === 'KeyR') toggleReveal();
+});
+
+modeButton.addEventListener('click', cycleMood);
+driftButton.addEventListener('click', toggleDrift);
+soundButton.addEventListener('click', toggleAudio);
+captureButton.addEventListener('click', captureFrame);
+zenButton.addEventListener('click', toggleZen);
+
+setMode(0, false);
 updateUiState();
+flashMarquee('Taste Nocturne // touch the relic, wake the room', 3200);
 
 const clock = new THREE.Clock();
+
+function updateConstellation() {
+  for (let i = 0; i < orbitNodes.length; i += 1) {
+    const node = orbitNodes[i].position;
+    constellationPositions[i * 3 + 0] = node.x;
+    constellationPositions[i * 3 + 1] = node.y;
+    constellationPositions[i * 3 + 2] = node.z;
+  }
+  constellationPositions[orbitNodes.length * 3 + 0] = orbitNodes[0].position.x;
+  constellationPositions[orbitNodes.length * 3 + 1] = orbitNodes[0].position.y;
+  constellationPositions[orbitNodes.length * 3 + 2] = orbitNodes[0].position.z;
+  constellationGeometry.attributes.position.needsUpdate = true;
+}
 
 function tick() {
   const elapsedTime = clock.getElapsedTime();
   const delta = clock.getDelta();
-  const activeMode = modes[modeIndex];
+  const mode = modes[modeIndex];
+  const revealMix = state.reveal ? 1 : 0;
 
   pointer.smooth.lerp(pointer.raw, 0.08);
   floorPointerTarget.set(pointer.world.x, pointer.world.z);
   floorUniforms.uPointer.value.lerp(floorPointerTarget, 0.08);
+  floorUniforms.uReveal.value = THREE.MathUtils.lerp(floorUniforms.uReveal.value, revealMix, 0.05);
 
   sculptureUniforms.uTime.value = elapsedTime;
   floorUniforms.uTime.value = elapsedTime;
@@ -900,55 +961,62 @@ function tick() {
   sculptureUniforms.uPulse.value = state.pulseStrength;
   sculptureUniforms.uHover.value = THREE.MathUtils.lerp(
     sculptureUniforms.uHover.value,
-    hovered ? 1 : 0,
+    state.hovered ? 1 : 0,
     0.08,
   );
   finalPass.uniforms.warp.value = state.warp;
 
-  const driftX = state.drift && !state.userOrbiting ? Math.sin(elapsedTime * 0.18) * 0.42 : 0;
+  const driftX = state.drift && !state.userOrbiting ? Math.sin(elapsedTime * 0.18) * (0.42 + revealMix * 0.12) : 0;
   const driftY = state.drift && !state.userOrbiting ? Math.cos(elapsedTime * 0.14) * 0.12 : 0;
   const targetCamX = pointer.smooth.x * 0.52 + driftX;
   const targetCamY = 1.04 + pointer.smooth.y * 0.18 + driftY;
+  const targetCamZ = state.reveal ? 6.25 : 6.8;
   camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, 0.02);
   camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCamY, 0.02);
+  camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.02);
 
   pointerLight.position.x = THREE.MathUtils.lerp(pointerLight.position.x, pointer.world.x * 0.45, 0.08);
   pointerLight.position.y = THREE.MathUtils.lerp(pointerLight.position.y, 0.6, 0.08);
   pointerLight.position.z = THREE.MathUtils.lerp(pointerLight.position.z, 1.8 + pointer.world.z * 0.18, 0.08);
-  pointerLight.color.copy(activeMode.colorB).lerp(activeMode.colorA, 0.35);
-  pointerLight.intensity = 1.1 + state.pulseStrength * 0.45;
+  pointerLight.color.copy(mode.colorB).lerp(mode.colorA, 0.35);
+  pointerLight.intensity = 1.1 + state.pulseStrength * 0.42 + revealMix * 0.08;
 
-  mainGroup.rotation.y = elapsedTime * 0.12;
+  mainGroup.rotation.y = elapsedTime * (0.12 + revealMix * 0.02);
+  mainGroup.rotation.x = Math.sin(elapsedTime * 0.18) * 0.03 * revealMix;
   core.rotation.x = elapsedTime * 0.13;
-  core.rotation.y = elapsedTime * (0.18 + activeMode.speed * 0.12);
+  core.rotation.y = elapsedTime * (0.18 + mode.speed * 0.12 + revealMix * 0.05);
   aura.rotation.y = -elapsedTime * 0.14;
   aura.rotation.x = elapsedTime * 0.08;
-  aura.scale.setScalar(1 + state.pulseStrength * 0.15 + Math.sin(elapsedTime * 1.2) * 0.02);
-  shell.rotation.z = elapsedTime * 0.08;
-  shell2.rotation.y = -elapsedTime * 0.05;
-  orbitGroup.rotation.y += 0.0036 + activeMode.speed * 0.0015;
-  orbitGroup.rotation.z = Math.sin(elapsedTime * 0.3) * 0.1;
+  aura.scale.setScalar(1 + state.pulseStrength * 0.14 + Math.sin(elapsedTime * 1.2) * 0.02 + revealMix * 0.07);
+  aura.material.opacity = 0.06 + revealMix * 0.05;
+  shell.rotation.z = elapsedTime * (0.08 + revealMix * 0.02);
+  shell2.rotation.y = -elapsedTime * (0.05 + revealMix * 0.04);
+  orbitGroup.rotation.y += 0.0036 + mode.speed * 0.0015 + revealMix * 0.0013;
+  orbitGroup.rotation.z = Math.sin(elapsedTime * 0.3) * (0.1 + revealMix * 0.08);
 
   orbitNodes.forEach((node, index) => {
     const { angle, radius, lift, wobble } = node.userData;
-    const t = elapsedTime * (0.45 + activeMode.speed * 0.3) + angle;
-    const ringRadius = radius + Math.sin(elapsedTime * wobble + index) * 0.14;
+    const t = elapsedTime * (0.45 + mode.speed * 0.3 + revealMix * 0.15) + angle;
+    const ringRadius = radius + Math.sin(elapsedTime * wobble + index) * (0.14 + revealMix * 0.06);
     node.position.set(
       Math.cos(t) * ringRadius,
-      Math.sin(t * 1.5 + index) * activeMode.orbitLift + lift,
+      Math.sin(t * 1.5 + index) * (mode.orbitLift + revealMix * 0.1) + lift,
       Math.sin(t) * ringRadius,
     );
     node.lookAt(core.position);
     node.rotateX(Math.PI / 2);
   });
+  updateConstellation();
+  constellation.material.opacity = THREE.MathUtils.lerp(constellation.material.opacity, state.reveal ? 0.24 : 0.02, 0.06);
 
-  particles.rotation.y = elapsedTime * 0.018;
+  particles.rotation.y = elapsedTime * (0.018 + revealMix * 0.008);
   particles.rotation.x = Math.sin(elapsedTime * 0.04) * 0.08;
+  particles.material.opacity = 0.88 + revealMix * 0.1;
 
   shootingStars.forEach((star) => {
     star.position.add(star.userData.velocity);
-    star.material.opacity = Math.max(0, Math.min(0.65, star.userData.life / 90));
-    star.userData.life -= 1;
+    star.material.opacity = Math.max(0, Math.min(0.75, star.userData.life / 90)) + revealMix * 0.08;
+    star.userData.life -= 1 + revealMix * 0.2;
     if (star.userData.life <= 0 || star.position.x > 12 || star.position.y < 1.8) {
       resetShootingStar(star);
     }
@@ -956,18 +1024,21 @@ function tick() {
 
   pointerRing.position.x = THREE.MathUtils.lerp(pointerRing.position.x, pointer.world.x, 0.18);
   pointerRing.position.z = THREE.MathUtils.lerp(pointerRing.position.z, pointer.world.z, 0.18);
-  const pointerScale = 1 + Math.sin(elapsedTime * 3.2) * 0.08 + state.pulseStrength * 1.3;
+  const pointerScale = 1 + Math.sin(elapsedTime * 3.2) * 0.08 + state.pulseStrength * 1.3 + revealMix * 0.3;
   pointerRing.scale.setScalar(pointerScale);
-  pointerRing.material.opacity = 0.16 + state.pulseStrength * 0.18;
+  pointerRing.material.opacity = 0.14 + state.pulseStrength * 0.18 + revealMix * 0.08;
 
-  pointerTrailPoints.unshift(new THREE.Vector3(pointer.world.x, -1.48 + Math.sin(elapsedTime * 4.0) * 0.02, pointer.world.z));
-  pointerTrailPoints.pop();
+  for (let i = pointerTrailLength - 1; i > 0; i -= 1) {
+    pointerTrailPoints[i].copy(pointerTrailPoints[i - 1]);
+  }
+  pointerTrailPoints[0].set(pointer.world.x, -1.48 + Math.sin(elapsedTime * 4.0) * 0.02, pointer.world.z);
   pointerTrailPoints.forEach((point, index) => {
     pointerTrailPositions[index * 3 + 0] = point.x;
     pointerTrailPositions[index * 3 + 1] = point.y;
     pointerTrailPositions[index * 3 + 2] = point.z;
   });
   pointerTrailGeometry.attributes.position.needsUpdate = true;
+  pointerTrail.material.opacity = 0.32 + revealMix * 0.12;
 
   for (let i = 0; i < burstCount; i += 1) {
     if (burstLife[i] <= 0) continue;
@@ -978,13 +1049,13 @@ function tick() {
     burstVelocities[i].multiplyScalar(0.985);
   }
   burstGeometry.attributes.position.needsUpdate = true;
-  burstMaterial.opacity = 0.2 + Math.min(0.9, state.pulseStrength * 0.7);
+  burstMaterial.opacity = 0.16 + Math.min(0.78, state.pulseStrength * 0.62) + revealMix * 0.04;
 
   if (audioEngine.context && state.audioEnabled) {
     const now = audioEngine.context.currentTime;
-    const energy = 650 + state.pulseStrength * 800 + activeMode.speed * 220;
+    const energy = 650 + state.pulseStrength * 800 + mode.speed * 220 + revealMix * 260;
     audioEngine.filter.frequency.setTargetAtTime(energy, now, 0.08);
-    audioEngine.master.gain.setTargetAtTime(0.035 + state.pulseStrength * 0.03, now, 0.08);
+    audioEngine.master.gain.setTargetAtTime(0.035 + state.pulseStrength * 0.03 + revealMix * 0.01, now, 0.08);
   }
 
   controls.target.x = THREE.MathUtils.lerp(
@@ -994,7 +1065,7 @@ function tick() {
   );
   controls.target.y = THREE.MathUtils.lerp(
     controls.target.y,
-    -0.12 + pointer.smooth.y * 0.08 + (state.drift && !state.userOrbiting ? Math.cos(elapsedTime * 0.22) * 0.03 : 0),
+    -0.12 + pointer.smooth.y * 0.08 + (state.drift && !state.userOrbiting ? Math.cos(elapsedTime * 0.22) * 0.03 : 0) + revealMix * 0.08,
     0.05,
   );
   controls.update();
