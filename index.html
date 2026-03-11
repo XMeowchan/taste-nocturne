@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Taste Nocturne — a moody interactive Three.js sculpture with pointer-reactive light, ripples, and cinematic bloom."
+      content="Taste Nocturne — a moody interactive Three.js sculpture with pointer-reactive light, ripples, cinematic bloom, ambient drift, and generative sound."
     />
     <title>Taste Nocturne</title>
     <script type="module" src="/src/main.js"></script>
@@ -18,23 +18,41 @@
         <div class="hud__eyebrow">CloudAI-X / threejs-skills inspired</div>
         <h1>Taste Nocturne</h1>
         <p class="hud__copy">
-          A quiet little digital sculpture: move to bend the light, drag to orbit,
-          and click the core to shift its mood.
+          A quiet digital relic that rewards curiosity: move to bend the light,
+          drag to orbit, click the core to mutate its mood, and slip into zen if
+          you want it all to disappear.
         </p>
+        <div class="chips">
+          <span class="chip" id="chipDrift">Drift on</span>
+          <span class="chip" id="chipAudio">Sound off</span>
+          <span class="chip" id="chipZen">UI visible</span>
+        </div>
       </div>
 
       <div class="panel">
-        <div>
-          <div class="panel__label">Mood</div>
-          <div class="panel__value" id="modeName">Velvet Pulse</div>
+        <div class="panel__head">
+          <div>
+            <div class="panel__label">Mood</div>
+            <div class="panel__value" id="modeName">Velvet Pulse</div>
+          </div>
+          <div class="panel__hint" id="statusText">Interactive sculpture online</div>
         </div>
-        <button id="modeButton" type="button">Shift mood</button>
+        <div class="panel__actions">
+          <button id="modeButton" type="button">Shift mood</button>
+          <button id="driftButton" type="button">Drift on</button>
+          <button id="soundButton" type="button">Enable sound</button>
+          <button id="captureButton" type="button">Capture frame</button>
+          <button id="zenButton" type="button">Zen mode</button>
+        </div>
       </div>
 
       <div class="footer">
         <span>move</span>
         <span>orbit</span>
         <span>click</span>
+        <span>d drift</span>
+        <span>h zen</span>
+        <span>m mood</span>
       </div>
     </div>
   </body>
