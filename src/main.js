@@ -22,7 +22,7 @@ const chipZen = document.querySelector('#chipZen');
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
-  pixelRatio: Math.min(window.devicePixelRatio, 2),
+  pixelRatio: Math.min(window.devicePixelRatio, 1.5),
 };
 
 const pointer = {
@@ -185,6 +185,16 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
 
+renderer.domElement.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  setStatus('Renderer recovering…', 4000);
+  flashMarquee('Context wobble // holding the scene together', 2600);
+});
+
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  setStatus('Renderer restored', 2200);
+});
+
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.enablePan = false;
@@ -297,7 +307,7 @@ const atmosphereUniforms = {
 };
 
 const atmosphere = new THREE.Mesh(
-  new THREE.SphereGeometry(28, 64, 64),
+  new THREE.SphereGeometry(28, 48, 48),
   new THREE.ShaderMaterial({
     side: THREE.BackSide,
     transparent: true,
@@ -396,7 +406,7 @@ const sculptureMaterial = new THREE.ShaderMaterial({
   `,
 });
 
-const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.08, 7), sculptureMaterial);
+const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1.08, 6), sculptureMaterial);
 core.position.y = -0.05;
 mainGroup.add(core);
 
@@ -486,7 +496,7 @@ const constellation = new THREE.Line(
 );
 mainGroup.add(constellation);
 
-const trailCount = 2800;
+const trailCount = 2200;
 const trailPositions = new Float32Array(trailCount * 3);
 const trailColors = new Float32Array(trailCount * 3);
 for (let i = 0; i < trailCount; i += 1) {
@@ -633,7 +643,7 @@ const floorMaterial = new THREE.ShaderMaterial({
   `,
 });
 
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 24, 240, 240), floorMaterial);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(24, 24, 180, 180), floorMaterial);
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -1.55;
 scene.add(floor);
@@ -942,7 +952,7 @@ function updateConstellation() {
 
 function tick() {
   const elapsedTime = clock.getElapsedTime();
-  const delta = clock.getDelta();
+  const delta = Math.min(clock.getDelta(), 0.05);
   const mode = modes[modeIndex];
   const revealMix = state.reveal ? 1 : 0;
 
@@ -1079,7 +1089,7 @@ tick();
 window.addEventListener('resize', () => {
   sizes.width = window.innerWidth;
   sizes.height = window.innerHeight;
-  sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
+  sizes.pixelRatio = Math.min(window.devicePixelRatio, 1.5);
 
   camera.aspect = sizes.width / sizes.height;
   camera.updateProjectionMatrix();
